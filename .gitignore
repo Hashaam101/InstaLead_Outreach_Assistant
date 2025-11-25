@@ -1,5 +1,5 @@
 # config.js should be ignored to protect sensitive information
-# Commenting out config.js for initial sample content commit
+config.js
 
 # Chrome Extension Specific Files
 *.crx
