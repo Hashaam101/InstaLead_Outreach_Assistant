@@ -1,5 +1,5 @@
 {
-  "manifest_version": 1,
+  "manifest_version": 2,
   "name": "InstaLead - Outreach Assistant",
   "version": "1.0",
   "description": "Deep scans profiles and websites for delivery info.",
