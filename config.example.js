@@ -1,4 +1,4 @@
 // config.js - API Key Configuration Sample File
-const CONFIG = {
+export const CONFIG = {
     GEMINI_API_KEY: "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 };

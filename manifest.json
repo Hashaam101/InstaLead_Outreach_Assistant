@@ -1,8 +1,8 @@
 {
-  "manifest_version": 2,
+  "manifest_version": 3,
   "name": "InstaLead - Outreach Assistant",
   "version": "1.0",
-  "description": "Deep scans profiles and websites for delivery info.",
+  "description": "Analyzes Instagram profiles for lead qualification using AI.",
   "permissions": [
     "storage",
     "activeTab",
@@ -25,6 +25,12 @@
   ],
   "options_page": "options.html",
   "action": {
-    "default_title": "Open Settings"
-  }
+    "default_title": "InstaLead"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["config.js"],
+      "matches": ["<all_urls>"]
+    }
+  ]
 }

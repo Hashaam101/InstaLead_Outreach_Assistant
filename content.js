@@ -7,12 +7,8 @@ function createOverlay() {
 
     overlay = document.createElement('div');
     overlay.id = 'insta-outreach-overlay';
-    
-    // Start minimized
-    minimizeOverlay();
-
     overlay.innerHTML = `
-        <div id="io-minimized-view" style="display:none; cursor:pointer; width: 50px; height: 50px; background: #0095f6; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(0,0,0,0.2);">
+        <div id="io-minimized-view" style="cursor:pointer; width: 50px; height: 50px; background: #0095f6; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(0,0,0,0.2);">
             <span style="font-size: 28px;">⚡</span>
         </div>
 
@@ -77,6 +73,8 @@ function createOverlay() {
     document.getElementById('btn-skip').onclick = () => {
         const r = prompt("Reason?"); if(r) logInteraction("SKIPPED", r);
     };
+    
+    minimizeOverlay();
 }
 
 function minimizeOverlay() {
@@ -128,6 +126,7 @@ async function startAnalysis() {
     }
 
     updateStatus("Scraping Profile Data...", 10);
+    document.getElementById('btn-start').disabled = true;
 
     const name = getProfileName();
     const bioText = document.querySelector('meta[property="og:description"]')?.content || "";
@@ -142,9 +141,20 @@ async function startAnalysis() {
         action: "analyzeGemini",
         data: { name, bioLink, bioText }
     }, (response) => {
+        if (chrome.runtime.lastError) {
+            console.warn("InstaLead: " + chrome.runtime.lastError.message);
+            alert("An extension error occurred. Please reload the page.");
+            document.getElementById('io-start-view').style.display = 'block';
+            document.getElementById('io-progress-view').style.display = 'none';
+            document.getElementById('btn-start').disabled = false;
+            return;
+        }
         if (response.error) {
             alert("Error: " + response.error);
-            location.reload(); 
+            // Instead of reloading, reset the UI so the user can try again
+            document.getElementById('io-start-view').style.display = 'block';
+            document.getElementById('io-progress-view').style.display = 'none';
+            document.getElementById('btn-start').disabled = false; // Re-enable the button
             return;
         }
         renderResults(response.data, name, bioLink, lastPostDate);

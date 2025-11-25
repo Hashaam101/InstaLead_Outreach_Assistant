@@ -1,11 +1,3 @@
-
-// 1. LOAD CONFIGURATION
-try { 
-    importScripts('config.js'); 
-} catch (e) { 
-    console.error("❌ Failed to load config.js. Make sure it exists and uses 'var CONFIG = ...'", e); 
-}
-
 // 2. YOUR SPECIFIC MODEL SETTING
 const MODEL_NAME = "gemini-2.5-flash"; 
 
@@ -68,34 +60,70 @@ async function scanWebsiteForKeywords(url, tabId) {
     } catch (error) { return "Website scan failed."; }
 }
 
-async function handleGeminiAnalysis(data, sendResponse, tabId) {
-    chrome.storage.sync.get(['apiKey'], async (items) => {
-        let apiKey = items.apiKey;
+async function getDefaultApiKey(tabId) {
+    try {
+        const url = chrome.runtime.getURL('config.js');
+        const response = await fetch(url);
+        if (!response.ok) return null;
+        
+        const text = await response.text();
+        const match = /GEMINI_API_KEY\s*:\s*["'](.*?)["']/s.exec(text);
 
-        if (!apiKey) {
-            try {
-                apiKey = CONFIG.GEMINI_API_KEY;
-            } catch (e) {
-                logToTab(tabId, "❌ Config Error", "CONFIG variable not found. Check config.js format.");
+        if (match && match[1] && match[1] !== "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx") {
+            logToTab(tabId, "🔑 Using default API Key from config.js.");
+            return match[1];
+        }
+        return null;
+
+    } catch (e) {
+        console.error("InstaLead: Error fetching or parsing config.js", e);
+        return null;
+    }
+}
+
+async function getApiKey(tabId) {
+    logToTab(tabId, "Checking for API key...");
+
+    // 1. Prioritize user-saved key from settings
+    const userKey = await new Promise((resolve) => {
+        chrome.storage.sync.get(['apiKey'], (items) => {
+            if (items.apiKey && items.apiKey.length > 5) {
+                logToTab(tabId, "🔑 Found user-provided API Key in settings.");
+                resolve(items.apiKey);
+            } else {
+                resolve(null);
             }
-        }
+        });
+    });
 
-        if (!apiKey) {
-            logToTab(tabId, "❌ API Key Missing", "Please set your API key in the extension options.");
-            sendResponse({ error: "API Key Missing. Please set it in the extension options." });
-            return;
-        }
+    if (userKey) {
+        return userKey;
+    }
 
-        const safeName = data.name || "Unknown Business";
-        const safeBio = (data.bioText || "").substring(0, 1000).replace(/(\r\n|\n|\r)/gm, " ");
-        const safeLink = data.bioLink || "No Link";
+    // 2. If no user key, fall back to default key from config.js
+    logToTab(tabId, "No user key found. Checking for default key in config.js...");
+    return await getDefaultApiKey(tabId);
+}
 
-        // Scan Website
-        const websiteScanResult = await scanWebsiteForKeywords(safeLink, tabId);
+async function handleGeminiAnalysis(data, sendResponse, tabId) {
+    const apiKey = await getApiKey(tabId);
 
-        updateProgress(tabId, "Consulting AI...", 80);
+    if (!apiKey) {
+        logToTab(tabId, "❌ API Key Missing", "Please set your API key in the extension options or add a config.js file.");
+        sendResponse({ error: "API Key Missing. Please set it in the extension options or create a config.js file." });
+        return;
+    }
 
-        const prompt = `Role: Lead Qualification Expert.
+    const safeName = data.name || "Unknown Business";
+    const safeBio = (data.bioText || "").substring(0, 1000).replace(/(\r\n|\n|\r)/gm, " ");
+    const safeLink = data.bioLink || "No Link";
+
+    // Scan Website
+    const websiteScanResult = await scanWebsiteForKeywords(safeLink, tabId);
+
+    updateProgress(tabId, "Consulting AI...", 80);
+
+    const prompt = `Role: Lead Qualification Expert.
         INPUT:
         - Name: "${safeName}"
         - Bio: "${safeBio}"
@@ -121,45 +149,44 @@ async function handleGeminiAnalysis(data, sendResponse, tabId) {
           "reasoning": "string"
         }`;
 
-        logToTab(tabId, `🚀 Sending Prompt to ${MODEL_NAME}`, { prompt });
+    logToTab(tabId, `🚀 Sending Prompt to ${MODEL_NAME}`, { prompt });
 
-        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${apiKey}`;
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${apiKey}`;
 
-        try {
-            const response = await fetch(apiUrl, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-            });
+    try {
+        const response = await fetch(apiUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+        });
 
-            const result = await response.json();
+        const result = await response.json();
 
-            updateProgress(tabId, "Finalizing...", 95);
+        updateProgress(tabId, "Finalizing...", 95);
 
-            if (!response.ok) {
-                const err = JSON.stringify(result, null, 2); // Pretty print error
-                logToTab(tabId, "❌ API ERROR", err);
-                sendResponse({ error: `API Error ${response.status}: See Console Logs` });
-                return;
-            }
-
-            if (!result.candidates || result.candidates.length === 0) {
-                sendResponse({ error: "AI returned no content." });
-                return;
-            }
-
-            const text = result.candidates[0].content.parts[0].text;
-            const jsonText = text.replace(/```json|```/g, '').trim();
-
-            logToTab(tabId, "✅ AI Response", JSON.parse(jsonText)); // Log success
-
-            sendResponse({ success: true, data: JSON.parse(jsonText) });
-
-        } catch (e) {
-            logToTab(tabId, "❌ Critical Code Error", e.message);
-            sendResponse({ error: "Ext Error: " + e.message });
+        if (!response.ok) {
+            const err = JSON.stringify(result, null, 2); // Pretty print error
+            logToTab(tabId, "❌ API ERROR", err);
+            sendResponse({ error: `API Error ${response.status}: See Console Logs` });
+            return;
         }
-    });
+
+        if (!result.candidates || result.candidates.length === 0) {
+            sendResponse({ error: "AI returned no content." });
+            return;
+        }
+
+        const text = result.candidates[0].content.parts[0].text;
+        const jsonText = text.replace(/```json|```/g, '').trim();
+
+        logToTab(tabId, "✅ AI Response", JSON.parse(jsonText)); // Log success
+
+        sendResponse({ success: true, data: JSON.parse(jsonText) });
+
+    } catch (e) {
+        logToTab(tabId, "❌ Critical Code Error", e.message);
+        sendResponse({ error: "Ext Error: " + e.message });
+    }
 }
 
 async function fetchPostDate(url, sendResponse) {
