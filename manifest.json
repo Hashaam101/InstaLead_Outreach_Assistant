@@ -1,0 +1,30 @@
+{
+  "manifest_version": 1,
+  "name": "InstaLead - Outreach Assistant",
+  "version": "1.0",
+  "description": "Deep scans profiles and websites for delivery info.",
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://www.instagram.com/*",
+    "https://generativelanguage.googleapis.com/*",
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.instagram.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "options_page": "options.html",
+  "action": {
+    "default_title": "Open Settings"
+  }
+}
